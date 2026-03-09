@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        =====================================================
+        Spring Boot 親POM の継承
+        =====================================================
+        spring-boot-starter-parent を継承することで以下が自動設定される:
+          - 依存関係のバージョン管理（BOM）
+          - Javaコンパイラに -parameters フラグを付与（@RequestParam名の解決に必要）
+          - Maven プラグインのバージョン管理
+          - UTF-8 エンコーディング設定
+
+        旧プロジェクトとの違い:
+          旧: 素の Spring 5.3.x を個別に依存関係として定義
+          新: Spring Boot 3.4.3 の親POMに依存関係管理を委譲
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.4.3</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.example</groupId>
+    <artifactId>server</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+    <!--
+        packaging: war
+          外部 Tomcat（Tomcat 10.x）にデプロイするための WAR ファイルを生成する。
+          Spring Boot はデフォルトでは組み込み Tomcat を持つ実行可能 JAR を生成するが、
+          war を指定することで外部サーブレットコンテナ向けの WAR を生成する。
+
+          また、maven-war-plugin の attachClasses=true により、
+          WAR とは別に「server-1.0-SNAPSHOT-classes.jar」も生成する。
+          クライアント側はこの JAR を Maven 依存として参照することで
+          UserService インターフェースと User DTO を共有する（旧プロジェクト踏襲）。
+    -->
+    <packaging>war</packaging>
+
+    <properties>
+        <!--
+            Java 17 を使用する。
+            Spring Boot 3.x は Java 17 以上を必須とする。
+            （旧プロジェクトは Java 11 + Spring 5.x だった）
+
+            Tomcat 10.1.x は jakarta.servlet パッケージを使用するため、
+            旧プロジェクトの javax.servlet から移行している。
+        -->
+        <java.version>17</java.version>
+    </properties>
+
+    <dependencies>
+
+        <!--
+            spring-boot-starter-web:
+            Spring MVC + Jackson + 組み込み Tomcat を含む Web アプリ開発用スターター。
+
+            ここでは spring-boot-starter-tomcat を exclusion（除外）する。
+            理由: 外部の Tomcat 10.x にデプロイするため、
+                  WAR に Tomcat を含める必要がない。
+                  実行時は Tomcat 側が jakarta.servlet-api を提供する。
+
+            旧プロジェクトとの違い:
+              旧: spring-webmvc を個別に依存関係として定義
+              新: spring-boot-starter-web が spring-webmvc を含む
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-tomcat</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!--
+            spring-boot-starter-tomcat:
+            scope=provided で宣言することで:
+              - コンパイル時: jakarta.servlet-api が利用可能
+              - WAR 内: Tomcat の JARは含めない
+              - 実行時: Tomcat コンテナ側が jakarta.servlet-api を提供する
+
+            旧プロジェクトとの違い:
+              旧: javax.servlet-api 4.0.1 を scope=provided で直接指定（Tomcat 9 対応）
+              新: spring-boot-starter-tomcat を scope=provided で指定（Tomcat 10 / jakarta.servlet 対応）
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-tomcat</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <plugins>
+
+            <!--
+                spring-boot-maven-plugin:
+                Spring Boot アプリを実行可能な WAR としてパッケージングするプラグイン。
+
+                WAR パッケージング時:
+                  - Tomcat などへのデプロイ用 WAR を生成する
+                  - 同時に「java -jar」での直接実行にも対応した WAR を生成する
+                  - SpringBootServletInitializer サブクラスが Tomcat へのエントリポイントになる
+
+                旧プロジェクトとの違い:
+                  旧: spring-boot-maven-plugin なし（素の Maven WAR ビルド）
+                  新: spring-boot-maven-plugin によりビルドを管理
+            -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+
+            <!--
+                maven-war-plugin:
+                WAR ファイルの生成を制御するプラグイン。
+
+                attachClasses=true:
+                  WAR ファイルとは別に「server-1.0-SNAPSHOT-classes.jar」を生成する。
+                  クライアント側がこの JAR を classifier=classes で参照することで、
+                  UserService インターフェースと User DTO を共有する（旧プロジェクト踏襲）。
+
+                failOnMissingWebXml=false:
+                  Spring Boot は web.xml を使用しない。
+                  SpringBootServletInitializer が web.xml の代替として機能するため、
+                  web.xml が存在しなくてもビルドエラーにしない設定。
+
+                  旧プロジェクトとの違い:
+                    旧: src/main/webapp/WEB-INF/web.xml に DispatcherServlet を手動定義
+                    新: web.xml 不要。SpringBootServletInitializer が代替
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-war-plugin</artifactId>
+                <configuration>
+                    <!-- classes JAR を WAR とは別に生成してクライアントと共有する -->
+                    <attachClasses>true</attachClasses>
+                    <!-- Spring Boot は web.xml を使わないためビルドエラーにしない -->
+                    <failOnMissingWebXml>false</failOnMissingWebXml>
+                </configuration>
+            </plugin>
+
+        </plugins>
+    </build>
+
+</project>

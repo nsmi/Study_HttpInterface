@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        =====================================================
+        Spring Boot 親POM の継承（バージョン管理目的）
+        =====================================================
+        クライアントは Spring Boot アプリケーションではなく、
+        普通の Java スタンドアロンアプリ（main メソッドで起動）。
+
+        それでも spring-boot-starter-parent を継承する理由:
+          Spring / Jackson 等のバージョンをサーバー側と揃えるため。
+          親POMの BOM（Bill of Materials）により、バージョンを個別指定しなくてよい。
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.4.3</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.example</groupId>
+    <artifactId>client</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <properties>
+        <java.version>17</java.version>
+    </properties>
+
+    <dependencies>
+
+        <!--
+            spring-web:
+            HTTP Interface 関連の主要クラスを提供するモジュール。
+
+            含まれる主なクラス:
+              - RestClient                  → HTTP リクエストを送信するクライアント（RestTemplate の後継）
+              - RestClientAdapter           → RestClient を HttpServiceProxyFactory に渡すためのアダプター
+              - HttpServiceProxyFactory     → @HttpExchange インターフェースの動的プロキシを生成するファクトリー
+              - @HttpExchange / @GetExchange 等のアノテーション
+
+            旧プロジェクトとの違い:
+              旧: spring-web の HttpInvokerProxyFactoryBean + cfg.xml（XML設定）で接続
+              新: spring-web の RestClient + HttpServiceProxyFactory + コード設定
+        -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+        </dependency>
+
+        <!--
+            spring-aop:
+            HttpServiceProxyFactory が @HttpExchange インターフェースの
+            JDK 動的プロキシを生成する際に使用するモジュール。
+
+            JDK 動的プロキシの仕組み:
+              メソッド呼び出し → プロキシの InvocationHandler → HTTP リクエスト組み立て → RestClient で送信
+        -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-aop</artifactId>
+        </dependency>
+
+        <!--
+            spring-context:
+            AOP プロキシ生成に必要なインフラを提供する。
+            spring-aop の上位モジュールとして間接的に利用される。
+        -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+
+        <!--
+            jackson-databind:
+            RestClient が HTTP レスポンスの JSON を Java オブジェクトにデシリアライズする際に使用する。
+
+            旧プロジェクトとの違い:
+              旧: HTTP Invoker は Java シリアライズ（バイナリ）を使うため Jackson 不要だった
+              新: JSON 通信のため Jackson が必須
+        -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <!--
+            server の classes JAR（旧プロジェクト踏襲：パターン1）:
+            classifier=classes を指定することで、
+            サーバー側の mvn install で生成された
+            「server-1.0-SNAPSHOT-classes.jar」を参照する。
+
+            この JAR に含まれるクラス:
+              - com.example.model.User               （DTO）
+              - com.example.service.UserService      （@HttpExchange インターフェース）
+              - com.example.service.UserServiceImpl  （実装クラス ※クライアントは使わない）
+
+            注意: 実装クラス（UserServiceImpl）も含まれるのは旧プロジェクト同様の欠点。
+                  実際のプロジェクトでは共通モジュールに切り出すのが望ましい（tomi_spring/demo のパターン）。
+
+            前提: サーバー側で事前に「mvn install」を実行しておくこと。
+        -->
+        <dependency>
+            <groupId>com.example</groupId>
+            <artifactId>server</artifactId>
+            <version>1.0-SNAPSHOT</version>
+            <classifier>classes</classifier>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <plugins>
+
+            <!--
+                exec-maven-plugin:
+                Maven から Java メインクラスを直接実行するためのプラグイン。
+
+                実行コマンド（旧プロジェクトと同じ）:
+                  cd client
+                  mvn compile exec:java
+
+                「mvn compile exec:java」が必要な理由:
+                  exec:java はスタンドアロンゴールで Maven ライフサイクルを自動実行しない。
+                  compile フェーズを先に実行することで依存関係が解決された状態で起動できる。
+            -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.1.0</version>
+                <configuration>
+                    <!-- 実行するメインクラスを指定 -->
+                    <mainClass>com.example.ClientMain</mainClass>
+                </configuration>
+            </plugin>
+
+        </plugins>
+    </build>
+
+</project>
